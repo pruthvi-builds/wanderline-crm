@@ -1,10 +1,41 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LayoutGrid, Users, Briefcase, Bell, IndianRupee, Plus, X,
   Phone, MessageCircle, Mail, MapPin, ChevronRight,
   ChevronLeft, Check, Plane, Search, Truck, Star, Clock,
-  FileText, UserPlus, Building2, Car, Receipt, TrendingUp
+  FileText, UserPlus, Building2, Car, Receipt, TrendingUp,
+  Settings, RefreshCw, Send
 } from "lucide-react";
+
+/* ---------------------------------------------------------------
+   BACKEND API HELPERS — Netlify Functions + Netlify Blobs.
+   Every read falls back to the local mock data if the function isn't
+   reachable (e.g. running `vite dev` locally without `netlify dev`),
+   so local development keeps working exactly as before.
+----------------------------------------------------------------*/
+async function apiGet(path, fallback) {
+  try {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error("bad response");
+    return await res.json();
+  } catch {
+    return fallback;
+  }
+}
+
+async function apiPost(path, payload) {
+  try {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error("bad response");
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
 
 /* ---------------------------------------------------------------
    TOKENS — navy / parchment / brass / teal / stamp red
@@ -46,21 +77,21 @@ const FONTS = `
 const STAGES = ["New Inquiry", "Contacted", "Quotation Sent", "Booking Confirmed", "Completed & Reviewed"];
 
 const initialLeads = [
-  { id: "L1", name: "Rohan Deshmukh", destination: "Goa", pax: 4, sellingPrice: 65000, cost: 47000, referredBy: "Website Form", source: "Website", stage: "New Inquiry", lost: false, date: "2026-08-14", travelWindow: "Oct 2026", log: [] },
-  { id: "L2", name: "Sneha Kulkarni", destination: "Bali", pax: 2, sellingPrice: 145000, cost: 101000, referredBy: "Instagram DM", source: "Instagram", stage: "Contacted", lost: false, date: "2026-08-12", travelWindow: "Dec 2026", log: [
+  { id: "L1", name: "Rohan Deshmukh", destination: "Goa", pax: 4, phone: "", sellingPrice: 65000, cost: 47000, referredBy: "Website Form", source: "Website", stage: "New Inquiry", lost: false, date: "2026-08-14", travelWindow: "Oct 2026", log: [] },
+  { id: "L2", name: "Sneha Kulkarni", destination: "Bali", pax: 2, phone: "", sellingPrice: 145000, cost: 101000, referredBy: "Instagram DM", source: "Instagram", stage: "Contacted", lost: false, date: "2026-08-12", travelWindow: "Dec 2026", log: [
     { id: "n1", channel: "Call", note: "Discussed 6N/7D honeymoon package, sending quote by Fri.", ts: "12 Aug, 4:10 PM" },
   ]},
-  { id: "L3", name: "Imran Shaikh", destination: "Kerala Backwaters", pax: 6, sellingPrice: 98000, cost: 71000, referredBy: "Farah Ansari (past client)", source: "Referral", stage: "Quotation Sent", lost: false, date: "2026-08-10", travelWindow: "Sep 2026", log: [
+  { id: "L3", name: "Imran Shaikh", destination: "Kerala Backwaters", pax: 6, phone: "", sellingPrice: 98000, cost: 71000, referredBy: "Farah Ansari (past client)", source: "Referral", stage: "Quotation Sent", lost: false, date: "2026-08-10", travelWindow: "Sep 2026", log: [
     { id: "n2", channel: "WhatsApp", note: "Shared houseboat + Munnar itinerary PDF manually.", ts: "10 Aug, 11:02 AM" },
     { id: "n3", channel: "Call", note: "Family wants a day added in Alleppey — revising quote.", ts: "11 Aug, 6:40 PM" },
   ]},
-  { id: "L4", name: "Priya & Karthik", destination: "Ladakh", pax: 2, sellingPrice: 110000, cost: 79000, referredBy: "Google Business Profile", source: "Website", stage: "Booking Confirmed", lost: false, date: "2026-08-05", travelWindow: "Sep 2026", log: [
+  { id: "L4", name: "Priya & Karthik", destination: "Ladakh", pax: 2, phone: "", sellingPrice: 110000, cost: 79000, referredBy: "Google Business Profile", source: "Website", stage: "Booking Confirmed", lost: false, date: "2026-08-05", travelWindow: "Sep 2026", log: [
     { id: "n4", channel: "Email", note: "Advance received, confirming bike + Khardung La permit.", ts: "6 Aug, 9:20 AM" },
   ]},
-  { id: "L5", name: "Aditya Rane", destination: "Dubai", pax: 3, sellingPrice: 180000, cost: 132000, referredBy: "IndiaMART inquiry", source: "IndiaMART", stage: "Contacted", lost: true, date: "2026-07-29", travelWindow: "Aug 2026", log: [
+  { id: "L5", name: "Aditya Rane", destination: "Dubai", pax: 3, phone: "", sellingPrice: 180000, cost: 132000, referredBy: "IndiaMART inquiry", source: "IndiaMART", stage: "Contacted", lost: true, date: "2026-07-29", travelWindow: "Aug 2026", log: [
     { id: "n5", channel: "Call", note: "Went with a cheaper package from another agent.", ts: "1 Aug, 2:15 PM" },
   ]},
-  { id: "L6", name: "Meera Joshi", destination: "Andaman Islands", pax: 5, sellingPrice: 220000, cost: 158000, referredBy: "Website Form", source: "Website", stage: "New Inquiry", lost: false, date: "2026-08-15", travelWindow: "Nov 2026", log: [] },
+  { id: "L6", name: "Meera Joshi", destination: "Andaman Islands", pax: 5, phone: "", sellingPrice: 220000, cost: 158000, referredBy: "Website Form", source: "Website", stage: "New Inquiry", lost: false, date: "2026-08-15", travelWindow: "Nov 2026", log: [] },
 ];
 
 const initialBookings = [
@@ -216,7 +247,7 @@ function QuickActions({ onNewInquiry, onNewSupplier, onNewQuotation, onNewInvoic
    straight into the pipeline so you can demo the flow today.
 ----------------------------------------------------------------*/
 function NewInquiryModal({ onClose, onCreate }) {
-  const [form, setForm] = useState({ name: "", destination: "", pax: 2, budget: "", travelWindow: "", referredBy: "", source: "Website" });
+  const [form, setForm] = useState({ name: "", destination: "", pax: 2, phone: "", budget: "", travelWindow: "", referredBy: "", source: "Website" });
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
   return (
@@ -231,6 +262,7 @@ function NewInquiryModal({ onClose, onCreate }) {
           <p className="text-[11px] text-[var(--text-mute)] -mt-1">These are the exact fields a public "Plan my trip" form on your website or Instagram bio link would collect — filled here to demo the flow.</p>
           {[
             { k: "name", label: "Traveller name", ph: "e.g. Ankita Verma" },
+            { k: "phone", label: "Phone / WhatsApp number", ph: "e.g. +91 98xxxxxx21" },
             { k: "destination", label: "Destination", ph: "e.g. Vietnam" },
             { k: "travelWindow", label: "Travel window", ph: "e.g. Dec 2026" },
             { k: "budget", label: "Approx. budget (₹)", ph: "e.g. 85000" },
@@ -621,12 +653,33 @@ function Dashboard({ leads, bookings, followups, suppliers, invoices, activity, 
   );
 }
 
-function LeadDrawer({ lead, onClose, onAddNote, onMoveStage, onMarkLost }) {
+function waTemplateFor(lead) {
+  const base = `Hi ${lead.name}, thanks for your interest in ${lead.destination}!`;
+  if (lead.stage === "Quotation Sent") return `${base} Just checking in — did you get a chance to look over the quote we sent?`;
+  if (lead.stage === "Booking Confirmed") return `${base} Your trip is confirmed — we'll share the final itinerary and travel documents shortly.`;
+  if (lead.stage === "Contacted") return `${base} Following up on our chat — let us know if you'd like us to put together a quote.`;
+  return `${base} We'll be in touch shortly with a quote.`;
+}
+
+function LeadDrawer({ lead, onClose, onAddNote, onMoveStage, onMarkLost, onSendWhatsApp }) {
   const [channel, setChannel] = useState("Call");
   const [note, setNote] = useState("");
+  const [waPhone, setWaPhone] = useState(lead?.phone || "");
+  const [waMessage, setWaMessage] = useState(lead ? waTemplateFor(lead) : "");
+  const [waSending, setWaSending] = useState(false);
+  const [waResult, setWaResult] = useState(null);
   if (!lead) return null;
   const idx = STAGES.indexOf(lead.stage);
   const profit = lead.sellingPrice - lead.cost;
+
+  const handleSendWhatsApp = async () => {
+    if (!waPhone.trim() || !waMessage.trim()) return;
+    setWaSending(true);
+    setWaResult(null);
+    const result = await onSendWhatsApp(lead, waPhone.trim(), waMessage.trim());
+    setWaResult(result);
+    setWaSending(false);
+  };
 
   return (
     <div className="fixed inset-0 z-30 flex justify-end">
@@ -657,6 +710,41 @@ function LeadDrawer({ lead, onClose, onAddNote, onMoveStage, onMarkLost }) {
           </div>
 
           <div className="text-[12px] text-[var(--text-mute)]">Referred by: <span className="text-[var(--ink)] font-medium">{lead.referredBy || "—"}</span></div>
+
+          <div className="bg-[var(--paper-card)] border border-[var(--line)] rounded-lg p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-[var(--text-mute)] font-medium">
+              <MessageCircle size={12} /> Send WhatsApp
+            </div>
+            <input
+              value={waPhone}
+              onChange={e => setWaPhone(e.target.value)}
+              placeholder="Phone number, e.g. +91 98xxxxxx21"
+              className="w-full text-[12.5px] p-2 rounded border border-[var(--line)] bg-[var(--paper)]"
+            />
+            <textarea
+              value={waMessage}
+              onChange={e => setWaMessage(e.target.value)}
+              rows={3}
+              className="w-full text-[12.5px] p-2 rounded border border-[var(--line)] bg-[var(--paper)] resize-none"
+            />
+            <button
+              onClick={handleSendWhatsApp}
+              disabled={waSending || !waPhone.trim() || !waMessage.trim()}
+              className="w-full text-[12px] font-medium py-1.5 rounded flex items-center justify-center gap-1 disabled:opacity-50"
+              style={{ background: "var(--teal)", color: "white" }}
+            >
+              <Send size={13} /> {waSending ? "Sending…" : "Send via WhatsApp"}
+            </button>
+            {waResult && (
+              <div className="text-[11px] flex items-start gap-1.5">
+                {waResult.status === "sent" && <StampBadge text="Sent" color="var(--teal)" />}
+                {waResult.status === "simulated" && <StampBadge text="Simulated — not connected" color="var(--brass-dark)" />}
+                {waResult.status === "failed" && <StampBadge text="Failed" color="var(--stamp)" />}
+                {waResult.status === "offline" && <StampBadge text="Offline — not saved" color="var(--stamp)" />}
+                {waResult.note && <span className="text-[var(--text-mute)] flex-1">{waResult.note}</span>}
+              </div>
+            )}
+          </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -716,7 +804,55 @@ function LeadDrawer({ lead, onClose, onAddNote, onMoveStage, onMarkLost }) {
   );
 }
 
-function LeadsBoard({ leads, onOpen }) {
+function SyncFromSheet({ onSync }) {
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handleSync = async () => {
+    if (!sheetUrl.trim()) return;
+    setSyncing(true);
+    setResult(null);
+    const res = await onSync(sheetUrl.trim());
+    setResult(res);
+    setSyncing(false);
+  };
+
+  return (
+    <div className="ticket bg-[var(--paper-card)] rounded-lg shadow-sm border border-[var(--line)] p-4 mb-4">
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-[var(--text-mute)] font-medium mb-2">
+        <RefreshCw size={12} /> Sync leads from Google Sheet
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input
+          value={sheetUrl}
+          onChange={e => setSheetUrl(e.target.value)}
+          placeholder="Google Sheet CSV export link (File → Share → Publish to web → CSV)"
+          className="flex-1 min-w-[240px] text-[12.5px] p-2 rounded border border-[var(--line)] bg-[var(--paper)]"
+        />
+        <button
+          onClick={handleSync}
+          disabled={syncing || !sheetUrl.trim()}
+          className="flex items-center gap-1.5 text-[12px] font-medium px-3 py-2 rounded disabled:opacity-50"
+          style={{ background: "var(--brass)", color: "white" }}
+        >
+          <RefreshCw size={13} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing…" : "Sync now"}
+        </button>
+      </div>
+      {result && (
+        <div className="text-[11.5px] text-[var(--text-mute)] mt-2">
+          {result.error
+            ? <span style={{ color: "var(--stamp)" }}>{result.error}</span>
+            : <>Imported <span className="font-medium text-[var(--ink)]">{result.imported?.length ?? 0}</span> new lead{(result.imported?.length ?? 0) === 1 ? "" : "s"}, skipped {result.skipped ?? 0} duplicate{(result.skipped ?? 0) === 1 ? "" : "s"}.
+              {result.recognizedColumns?.length > 0 && <div className="mt-1 font-mono text-[10.5px]">Recognized columns: {result.recognizedColumns.join(", ")}</div>}
+            </>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeadsBoard({ leads, onOpen, onSync }) {
   const lost = leads.filter(l => l.lost);
   return (
     <div>
@@ -726,6 +862,7 @@ function LeadsBoard({ leads, onOpen }) {
           <p className="text-[13px] text-[var(--text-mute)] mt-0.5">Open a card to log contact, move it forward, or see its numbers.</p>
         </div>
       </div>
+      <SyncFromSheet onSync={onSync} />
       <div className="flex gap-4 overflow-x-auto pb-3">
         {STAGES.map((stage, si) => (
           <div key={stage} className="min-w-[250px] flex-1">
@@ -1067,6 +1204,102 @@ function Followups({ followups, onToggle }) {
   );
 }
 
+const waStatusColor = { sent: "var(--teal)", simulated: "var(--brass-dark)", failed: "var(--stamp)", offline: "var(--stamp)" };
+const waStatusLabel = { sent: "Sent", simulated: "Simulated — not connected", failed: "Failed", offline: "Offline" };
+
+function WhatsAppOutbox({ outbox, configured }) {
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+        <h1 className="font-display text-[24px] font-semibold text-[var(--ink)]">WhatsApp</h1>
+        <div className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-full border" style={{ borderColor: "var(--line)" }}>
+          <span className="w-2 h-2 rounded-full" style={{ background: configured ? "var(--teal)" : "var(--brass)" }} />
+          {configured ? "Business API connected" : "Not connected — sends are simulated"}
+        </div>
+      </div>
+      <p className="text-[13px] text-[var(--text-mute)] mb-5">Every message attempted from a lead's card, whether actually sent or simulated because credentials aren't set up yet.</p>
+      <div className="bg-[var(--paper-card)] rounded-lg border border-[var(--line)] overflow-hidden">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wide text-[var(--text-mute)] border-b border-[var(--line)]">
+              <th className="p-3 font-medium">Phone</th><th className="p-3 font-medium">Message</th>
+              <th className="p-3 font-medium">Status</th><th className="p-3 font-medium">When</th><th className="p-3 font-medium">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {outbox.map(w => (
+              <tr key={w.id} className="border-b border-[var(--line)] last:border-0">
+                <td className="p-3 font-mono text-[var(--ink)]">{w.phone}</td>
+                <td className="p-3 text-[var(--text-mute)] max-w-[260px] truncate">{w.message}</td>
+                <td className="p-3"><StampBadge text={waStatusLabel[w.status] || w.status} color={waStatusColor[w.status] || "var(--text-mute)"} /></td>
+                <td className="p-3 text-[var(--text-mute)] font-mono">{w.ts}</td>
+                <td className="p-3 text-[var(--text-mute)] max-w-[220px] truncate">{w.note}</td>
+              </tr>
+            ))}
+            {outbox.length === 0 && (
+              <tr><td colSpan={5} className="p-4 text-center text-[var(--text-mute)] italic">No WhatsApp messages sent yet</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SettingsView({ configured }) {
+  return (
+    <div className="max-w-2xl">
+      <h1 className="font-display text-[24px] font-semibold text-[var(--ink)] mb-1">Settings</h1>
+      <p className="text-[13px] text-[var(--text-mute)] mb-5">How this CRM's data storage and integrations work, in plain language.</p>
+
+      <div className="space-y-4">
+        <div className="bg-[var(--paper-card)] rounded-lg border border-[var(--line)] p-4">
+          <div className="font-display text-[15px] font-semibold text-[var(--ink)] mb-1">Data storage</div>
+          <p className="text-[13px] text-[var(--text)] leading-relaxed">
+            This CRM stores leads, quotations, invoices, and activity using Netlify's built-in storage
+            (Netlify Blobs), which comes with your Netlify account — no separate database or extra
+            account needed. It's a good fit for a single-person or small-team CRM like this one.
+          </p>
+        </div>
+
+        <div className="bg-[var(--paper-card)] rounded-lg border border-[var(--line)] p-4">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="font-display text-[15px] font-semibold text-[var(--ink)]">WhatsApp sending</div>
+            <div className="flex items-center gap-1.5 text-[11px] font-mono">
+              <span className="w-2 h-2 rounded-full" style={{ background: configured ? "var(--teal)" : "var(--brass)" }} />
+              {configured ? "Connected" : "Not connected yet"}
+            </div>
+          </div>
+          <p className="text-[13px] text-[var(--text)] leading-relaxed">
+            To send real WhatsApp messages, you need a Meta WhatsApp Business API account (set up
+            directly with Meta or through a provider). Once you have it, add two values —
+            <span className="font-mono text-[12px]"> WHATSAPP_TOKEN</span> and
+            <span className="font-mono text-[12px]"> WHATSAPP_PHONE_NUMBER_ID</span> — as Environment
+            variables under <span className="font-medium">Site settings → Environment variables</span> in
+            your Netlify dashboard. Until then, "Send via WhatsApp" clearly marks messages as
+            <span className="font-medium"> simulated</span> instead of pretending they went out.
+          </p>
+          <p className="text-[11px] text-[var(--text-mute)] mt-2 italic">
+            For security, this app never asks you to paste those credentials into a form here — they're
+            set only in Netlify's own environment variable settings, never exposed to the browser.
+          </p>
+        </div>
+
+        <div className="bg-[var(--paper-card)] rounded-lg border border-[var(--line)] p-4">
+          <div className="font-display text-[15px] font-semibold text-[var(--ink)] mb-1">Syncing leads from a Google Sheet</div>
+          <ol className="text-[13px] text-[var(--text)] leading-relaxed list-decimal list-inside space-y-1">
+            <li>In your Google Sheet, go to <span className="font-medium">File → Share → Publish to web</span>.</li>
+            <li>Choose the sheet/tab with your inquiries and select <span className="font-medium">CSV</span> as the format, then publish.</li>
+            <li>Copy the link it gives you.</li>
+            <li>Paste that link into the <span className="font-medium">Sync leads from Google Sheet</span> box on the Leads page and click <span className="font-medium">Sync now</span>.</li>
+          </ol>
+          <p className="text-[13px] text-[var(--text-mute)] mt-2">Re-running the sync is safe — leads already imported (matched by phone number, or by name + destination) won't be duplicated.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------
    APP
 ----------------------------------------------------------------*/
@@ -1082,6 +1315,8 @@ export default function TravelCRM() {
   const [quotations, setQuotations] = useState(initialQuotations);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [activity, setActivity] = useState(initialActivity);
+  const [whatsappOutbox, setWhatsappOutbox] = useState([]);
+  const [whatsappConfigured, setWhatsappConfigured] = useState(false);
   const [openLead, setOpenLead] = useState(null);
   const [showInquiry, setShowInquiry] = useState(false);
   const [showSupplier, setShowSupplier] = useState(false);
@@ -1091,24 +1326,59 @@ export default function TravelCRM() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [search, setSearch] = useState("");
 
-  const pushActivity = (text) => setActivity(prev => [{ id: "A" + Date.now(), text, ts: now() }, ...prev]);
+  // On mount, pull real data from Netlify Functions/Blobs. If the functions
+  // aren't reachable (e.g. plain `vite dev` without `netlify dev`), quietly
+  // fall back to the in-memory mock data so local dev keeps working.
+  useEffect(() => {
+    (async () => {
+      const [remoteLeads, remoteActivity, remoteQuotations, remoteInvoices, remoteOutbox, remoteStatus] = await Promise.all([
+        apiGet("/.netlify/functions/leads", null),
+        apiGet("/.netlify/functions/activity", null),
+        apiGet("/.netlify/functions/quotations", null),
+        apiGet("/.netlify/functions/invoices", null),
+        apiGet("/.netlify/functions/whatsapp-outbox", []),
+        apiGet("/.netlify/functions/whatsapp-status", { configured: false }),
+      ]);
+      if (remoteLeads && remoteLeads.length > 0) setLeads(remoteLeads);
+      if (remoteActivity && remoteActivity.length > 0) setActivity(remoteActivity);
+      if (remoteQuotations && remoteQuotations.length > 0) setQuotations(remoteQuotations);
+      if (remoteInvoices && remoteInvoices.length > 0) setInvoices(remoteInvoices);
+      setWhatsappOutbox(remoteOutbox || []);
+      setWhatsappConfigured(!!(remoteStatus && remoteStatus.configured));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pushActivity = (text) => {
+    const entry = { id: "A" + Date.now(), text, ts: now() };
+    setActivity(prev => [entry, ...prev]);
+    apiPost("/.netlify/functions/activity", entry);
+  };
 
   const addNote = (leadId, channel, note) => {
     const ts = now();
     const entry = { id: "n" + Date.now(), channel, note, ts };
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, log: [...l.log, entry] } : l));
+    let updatedLead = null;
+    setLeads(prev => prev.map(l => {
+      if (l.id !== leadId) return l;
+      updatedLead = { ...l, log: [...l.log, entry] };
+      return updatedLead;
+    }));
     setOpenLead(prev => prev && prev.id === leadId ? { ...prev, log: [...prev.log, entry] } : prev);
     const lead = leads.find(l => l.id === leadId);
     if (lead) pushActivity(`${channel} logged with ${lead.name} — ${lead.destination}`);
+    if (updatedLead) apiPost("/.netlify/functions/leads", updatedLead);
   };
 
   const moveStage = (leadId, dir) => {
     let newStage = null;
+    let updatedLead = null;
     setLeads(prev => prev.map(l => {
       if (l.id !== leadId) return l;
       const idx = Math.min(Math.max(STAGES.indexOf(l.stage) + dir, 0), STAGES.length - 1);
       newStage = STAGES[idx];
-      return { ...l, stage: newStage };
+      updatedLead = { ...l, stage: newStage };
+      return updatedLead;
     }));
     setOpenLead(prev => {
       if (!prev || prev.id !== leadId) return prev;
@@ -1117,13 +1387,51 @@ export default function TravelCRM() {
     });
     const lead = leads.find(l => l.id === leadId);
     if (lead && newStage) pushActivity(`${lead.name} moved to "${newStage}" — ${lead.destination}`);
+    if (updatedLead) apiPost("/.netlify/functions/leads", updatedLead);
   };
 
   const markLost = (leadId) => {
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, lost: true } : l));
+    let updatedLead = null;
+    setLeads(prev => prev.map(l => {
+      if (l.id !== leadId) return l;
+      updatedLead = { ...l, lost: true };
+      return updatedLead;
+    }));
     setOpenLead(prev => prev && prev.id === leadId ? { ...prev, lost: true } : prev);
     const lead = leads.find(l => l.id === leadId);
     if (lead) pushActivity(`${lead.name} marked lost / cancelled — ${lead.destination}`);
+    if (updatedLead) apiPost("/.netlify/functions/leads", updatedLead);
+  };
+
+  const syncFromSheet = async (sheetUrl) => {
+    const result = await apiPost("/.netlify/functions/sync-sheet", { sheetUrl });
+    if (!result) {
+      return { error: "Couldn't reach the sync function — this only works once deployed on Netlify (or run with `netlify dev` locally)." };
+    }
+    if (result.error) return result;
+    if (result.imported && result.imported.length > 0) {
+      setLeads(prev => [...result.imported, ...prev]);
+      setActivity(prev => [
+        ...result.imported.map(l => ({ id: "A" + Date.now() + Math.random().toString(36).slice(2, 5), text: `New lead synced from Sheet — ${l.name}, ${l.destination}`, ts: now() })),
+        ...prev,
+      ]);
+    }
+    return result;
+  };
+
+  const sendWhatsApp = async (lead, phone, message) => {
+    const result = await apiPost("/.netlify/functions/whatsapp-send", { leadId: lead.id, phone, message, leadName: lead.name });
+    if (!result) {
+      return { status: "offline", note: "Couldn't reach the WhatsApp function — this only works once deployed on Netlify (or run with `netlify dev` locally). Nothing was sent." };
+    }
+    setWhatsappOutbox(prev => [result, ...prev]);
+    // whatsapp-send.js already appended a matching activity entry server-side
+    // (blobs store) — just reflect it locally without posting again.
+    const activityText = result.status === "sent" ? `WhatsApp sent to ${lead.name}`
+      : result.status === "simulated" ? `WhatsApp simulated (not connected) for ${lead.name}`
+      : `WhatsApp send failed for ${lead.name}`;
+    setActivity(prev => [{ id: "A" + Date.now(), text: activityText, ts: now() }, ...prev]);
+    return result;
   };
 
   const toggleFollowup = (id) => setFollowups(prev => prev.map(f => f.id === id ? { ...f, done: !f.done } : f));
@@ -1131,12 +1439,13 @@ export default function TravelCRM() {
   const createInquiry = (form) => {
     const id = "L" + Date.now();
     const newLead = {
-      id, name: form.name, destination: form.destination, pax: Number(form.pax) || 1,
+      id, name: form.name, destination: form.destination, pax: Number(form.pax) || 1, phone: form.phone || "",
       sellingPrice: Number(form.budget) || 0, cost: 0, referredBy: form.referredBy || "Website Form",
       source: "Website", stage: "New Inquiry", lost: false, date: "Today", travelWindow: form.travelWindow || "TBD", log: [],
     };
     setLeads(prev => [newLead, ...prev]);
     pushActivity(`New inquiry — ${form.name}, ${form.destination}`);
+    apiPost("/.netlify/functions/leads", newLead);
     setShowInquiry(false);
     setView("leads");
   };
@@ -1176,11 +1485,19 @@ export default function TravelCRM() {
   const createQuotation = ({ lead, amount, validUntil }) => {
     const id = `QT-2026-${qtCounter++}`;
     const created = "Today";
-    setQuotations(prev => [{ id, leadName: lead.name, destination: lead.destination, amount, status: "Sent", created, validUntil }, ...prev]);
+    const newQuotation = { id, leadName: lead.name, destination: lead.destination, amount, status: "Sent", created, validUntil };
+    setQuotations(prev => [newQuotation, ...prev]);
     pushActivity(`Quotation ${id} sent to ${lead.name} — ${lead.destination}`);
+    apiPost("/.netlify/functions/quotations", newQuotation);
     const entry = { id: "n" + Date.now(), channel: "Email", note: `Quotation ${id} sent for ₹${amount.toLocaleString("en-IN")}, valid until ${validUntil}.`, ts: now() };
-    setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, log: [...l.log, entry] } : l));
+    let updatedLead = null;
+    setLeads(prev => prev.map(l => {
+      if (l.id !== lead.id) return l;
+      updatedLead = { ...l, log: [...l.log, entry] };
+      return updatedLead;
+    }));
     setOpenLead(prev => prev && prev.id === lead.id ? { ...prev, log: [...prev.log, entry] } : prev);
+    if (updatedLead) apiPost("/.netlify/functions/leads", updatedLead);
     setShowQuotation(false);
     setView("quotations");
   };
@@ -1188,8 +1505,10 @@ export default function TravelCRM() {
   const createInvoice = ({ booking, amount, paid, dueDate }) => {
     const id = `INV-2026-${invCounter++}`;
     const status = paid >= amount ? "Paid" : paid > 0 ? "Partial" : "Issued";
-    setInvoices(prev => [{ id, bookingName: booking.name, destination: booking.destination, amount, paid, status, dueDate }, ...prev]);
+    const newInvoice = { id, bookingName: booking.name, destination: booking.destination, amount, paid, status, dueDate };
+    setInvoices(prev => [newInvoice, ...prev]);
     pushActivity(`Invoice ${id} created for ${booking.name} — ${booking.destination}`);
+    apiPost("/.netlify/functions/invoices", newInvoice);
     setShowInvoice(false);
     setView("invoices");
   };
@@ -1205,6 +1524,8 @@ export default function TravelCRM() {
     { id: "invoices", label: "Invoices", icon: Receipt },
     { id: "clients", label: "Clients", icon: MapPin },
     { id: "followups", label: "Follow-ups", icon: Bell },
+    { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+    { id: "settings", label: "Settings", icon: Settings },
   ];
 
   return (
@@ -1247,7 +1568,7 @@ export default function TravelCRM() {
 
         <main className="flex-1 overflow-y-auto p-5 md:p-8">
           {view === "dashboard" && <Dashboard leads={leads} bookings={bookings} followups={followups} suppliers={suppliers} invoices={invoices} activity={activity} onNewInquiry={() => setShowInquiry(true)} onNewSupplier={() => setShowSupplier(true)} onNewQuotation={() => setShowQuotation(true)} onNewInvoice={() => setShowInvoice(true)} />}
-          {view === "leads" && <LeadsBoard leads={leads} onOpen={setOpenLead} />}
+          {view === "leads" && <LeadsBoard leads={leads} onOpen={setOpenLead} onSync={syncFromSheet} />}
           {view === "bookings" && <Bookings bookings={bookings} />}
           {view === "suppliers" && <Suppliers suppliers={suppliers} />}
           {view === "hotels" && <Hotels hotels={hotels} onNewHotel={() => setShowHotel(true)} />}
@@ -1256,6 +1577,8 @@ export default function TravelCRM() {
           {view === "invoices" && <Invoices invoices={invoices} onNewInvoice={() => setShowInvoice(true)} />}
           {view === "clients" && <Clients clients={clients} />}
           {view === "followups" && <Followups followups={followups} onToggle={toggleFollowup} />}
+          {view === "whatsapp" && <WhatsAppOutbox outbox={whatsappOutbox} configured={whatsappConfigured} />}
+          {view === "settings" && <SettingsView configured={whatsappConfigured} />}
         </main>
 
         <nav className="md:hidden flex justify-around border-t border-[var(--line)] bg-[var(--paper-card)] py-2 overflow-x-auto">
@@ -1272,7 +1595,7 @@ export default function TravelCRM() {
       </div>
 
       {openLead && (
-        <LeadDrawer lead={leads.find(l => l.id === openLead.id) || openLead} onClose={() => setOpenLead(null)} onAddNote={addNote} onMoveStage={moveStage} onMarkLost={markLost} />
+        <LeadDrawer key={openLead.id} lead={leads.find(l => l.id === openLead.id) || openLead} onClose={() => setOpenLead(null)} onAddNote={addNote} onMoveStage={moveStage} onMarkLost={markLost} onSendWhatsApp={sendWhatsApp} />
       )}
       {showInquiry && <NewInquiryModal onClose={() => setShowInquiry(false)} onCreate={createInquiry} />}
       {showSupplier && <NewSupplierModal onClose={() => setShowSupplier(false)} onCreate={createSupplier} />}
